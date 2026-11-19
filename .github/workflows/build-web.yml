@@ -1,0 +1,30 @@
+name: Build Web
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: unzip -q ez_workforce_phase1.zip
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.29.3"
+          channel: stable
+          cache: true
+      - name: Build
+        working-directory: ez_workforce
+        run: |
+          flutter create . --platforms=web --project-name ez_workforce --org com.ezworkforce
+          rm -f test/widget_test.dart
+          flutter pub get
+          flutter build web --release \
+            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+          echo '{"rewrites":[{"source":"/(.*)","destination":"/index.html"}]}' > build/web/vercel.json
+      - uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: web-build
+          publish_dir: ez_workforce/build/web
