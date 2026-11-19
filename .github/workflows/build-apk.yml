@@ -5,7 +5,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: unzip -q ez_workforce_phase1.zip
+      - name: Locate project
+        id: loc
+        run: |
+          P=$(dirname "$(find . -name pubspec.yaml -not -path './.git/*' | sort | head -1)")
+          echo "Project dir: $P"
+          echo "dir=$P" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -16,7 +21,7 @@ jobs:
           channel: stable
           cache: true
       - name: Build
-        working-directory: ez_workforce
+        working-directory: ${{ steps.loc.outputs.dir }}
         run: |
           flutter create . --platforms=android --project-name ez_workforce --org com.ezworkforce
           rm -f test/widget_test.dart
@@ -28,4 +33,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: ez-workforce-apk
-          path: ez_workforce/build/app/outputs/flutter-apk/app-release.apk
+          path: ${{ steps.loc.outputs.dir }}/build/app/outputs/flutter-apk/app-release.apk
