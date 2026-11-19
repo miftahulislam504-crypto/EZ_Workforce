@@ -1,0 +1,18 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # The Supabase client returns dynamic JSON; models parse it defensively.
+    avoid_dynamic_calls: ignore
+  exclude:
+    - build/**
+    - "**/*.g.dart"
+
+linter:
+  rules:
+    prefer_const_constructors: true
+    prefer_const_literals_to_create_immutables: true
+    prefer_final_locals: true
+    avoid_print: true
+    always_declare_return_types: true
+    unawaited_futures: true

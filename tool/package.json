@@ -1,0 +1,12 @@
+{
+  "name": "ez-workforce-sql-tests",
+  "private": true,
+  "type": "module",
+  "description": "Runs the Supabase migrations against an in-memory Postgres (PGlite) and checks RLS, triggers and RPCs.",
+  "scripts": {
+    "test": "node sql_smoke_test.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.2.17"
+  }
+}
