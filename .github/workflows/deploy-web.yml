@@ -1,0 +1,101 @@
+name: Deploy Web
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # repo-তে zip থাকলে খুলবে, না থাকলে root-এর pubspec.yaml ব্যবহার করবে
+      - name: Find project
+        run: |
+          ZIP=$(find . -maxdepth 1 -iname '*.zip' | head -n 1)
+          if [ -n "$ZIP" ]; then
+            unzip -q "$ZIP" -d project_src
+            SRC=project_src
+          else
+            SRC=.
+          fi
+          PUBSPEC=$(find "$SRC" -maxdepth 3 -name pubspec.yaml -not -path '*/.git/*' | head -n 1)
+          if [ -z "$PUBSPEC" ]; then
+            echo "::error::pubspec.yaml পাওয়া যায়নি"
+            exit 1
+          fi
+          echo "APP_DIR=$(dirname "$PUBSPEC")" >> "$GITHUB_ENV"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.35.x"
+          cache: true
+
+      # ENV_JSON secret থাকলে সেটা, না থাকলে SUPABASE_URL + SUPABASE_ANON_KEY থেকে env.json
+      - name: Write env.json
+        working-directory: ${{ env.APP_DIR }}
+        env:
+          ENV_JSON: ${{ secrets.ENV_JSON }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -n "$ENV_JSON" ]; then
+            printf '%s' "$ENV_JSON" > env.json
+          else
+            if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+              echo "::error::Secrets SUPABASE_URL ও SUPABASE_ANON_KEY সেট করা নেই"
+              exit 1
+            fi
+            python3 -c "import json,os; json.dump({'SUPABASE_URL':os.environ['SUPABASE_URL'],'SUPABASE_ANON_KEY':os.environ['SUPABASE_ANON_KEY']}, open('env.json','w'))"
+          fi
+          python3 -c "import json; json.load(open('env.json'))"
+
+      - name: Build web
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          REPO="${GITHUB_REPOSITORY#*/}"
+          case "$REPO" in
+            *.github.io) BASE="/" ;;
+            *) BASE="/$REPO/" ;;
+          esac
+
+          # web ফোল্ডার না থাকলে (ERP, POS) তৈরি করে নেবে
+          if [ ! -f web/index.html ]; then
+            NAME=$(grep -m1 '^name:' pubspec.yaml | awk '{print $2}')
+            flutter create . --platforms=web --project-name "$NAME" --org com.ezapps
+          fi
+
+          flutter pub get
+          flutter build web --release \
+            --base-href "$BASE" \
+            --dart-define-from-file=env.json
+
+          # Pages-এ পেজ রিফ্রেশ করলে 404 না আসার জন্য
+          cp build/web/index.html build/web/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.APP_DIR }}/build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
